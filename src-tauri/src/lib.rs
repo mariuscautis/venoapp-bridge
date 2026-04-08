@@ -112,8 +112,10 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
         TcpStream::connect_timeout(&"8.8.8.8:53".parse().unwrap(), Duration::from_secs(2)).is_ok()
     }).await.unwrap_or(false);
     let duplicate_hub = *state.duplicate_hub.lock().await;
-    let hub_ip  = supabase::get_local_ip();
-    let ws_token = ws_server::get_or_create_token(&state.db);
+    let hub_ip = tokio::task::spawn_blocking(supabase::get_local_ip).await.unwrap_or_default();
+    let db_for_token = state.db.clone();
+    let ws_token = tokio::task::spawn_blocking(move || ws_server::get_or_create_token(&db_for_token))
+        .await.unwrap_or_default();
     Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok, duplicate_hub, hub_ip, ws_token })
 }
 

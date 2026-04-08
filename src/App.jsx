@@ -324,9 +324,9 @@ export default function App() {
     <div style={s.container}>
       {/* Header */}
       <div style={s.header}>
-        <div style={s.logo}>
+        <div style={{ ...s.logo, background: logoUrl ? "transparent" : colors.brand, padding: logoUrl ? 0 : undefined }}>
           {logoUrl
-            ? <img src={logoUrl} alt="Logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 4 }} />
+            ? <img src={logoUrl} alt="Logo" style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 8 }} />
             : "V"
           }
         </div>

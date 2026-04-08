@@ -45,6 +45,34 @@ pub async fn resolve_bridge_code(code: &str) -> Result<(String, String), String>
     Ok((restaurant_id, name))
 }
 
+/// Push the WebSocket auth token to Supabase so the PWA can authenticate.
+/// Called once after setup is saved.
+pub async fn push_ws_token(bridge_code: &str, token: &str, supabase_url: &str, anon_key: &str) -> Result<(), String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let rpc_url = format!("{}/rest/v1/rpc/set_bridge_ws_token", supabase_url);
+    let resp = client
+        .post(&rpc_url)
+        .header("apikey", anon_key)
+        .header("Authorization", format!("Bearer {}", anon_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "p_bridge_code": bridge_code, "p_token": token }))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP {}: {}", status, text));
+    }
+
+    Ok(())
+}
+
 pub async fn start_sync_loop(db: Db) {
     let client = Client::builder()
         .timeout(Duration::from_secs(15))

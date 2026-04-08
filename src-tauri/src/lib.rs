@@ -8,7 +8,7 @@ mod supabase;
 mod ws_server;
 
 use db::Db;
-use log::info;
+use log::{info, warn};
 use once_cell::sync::OnceCell;
 use printer::check_printer_online;
 use serde::{Deserialize, Serialize};
@@ -23,8 +23,9 @@ use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
 pub struct AppState {
-    pub db:         Db,
-    pub printer_ip: Arc<Mutex<String>>,
+    pub db:            Db,
+    pub printer_ip:    Arc<Mutex<String>>,
+    pub duplicate_hub: Arc<Mutex<bool>>,
 }
 
 static RUNTIME: OnceCell<tokio::runtime::Runtime> = OnceCell::new();
@@ -67,10 +68,22 @@ fn save_config(state: State<AppState>, config: BridgeConfig) -> Result<(), Strin
     db::config_set(db, "supabase_anon_key", &config.supabase_anon_key).map_err(|e| e.to_string())?;
     db::config_set(db, "setup_complete", if config.setup_complete { "true" } else { "false" })
         .map_err(|e| e.to_string())?;
-    let ip  = config.printer_ip.clone();
-    let pip = state.printer_ip.clone();
+    let ip   = config.printer_ip.clone();
+    let pip  = state.printer_ip.clone();
+    // Push WS token to Supabase so the PWA can authenticate
+    let token        = ws_server::get_or_create_token(&state.db);
+    let bridge_code  = config.bridge_code.clone();
+    let supabase_url = config.supabase_url.clone();
+    let anon_key     = config.supabase_anon_key.clone();
     RUNTIME.get().unwrap().spawn(async move {
         *pip.lock().await = ip;
+        if !bridge_code.is_empty() && !supabase_url.is_empty() && !anon_key.is_empty() {
+            if let Err(e) = supabase::push_ws_token(&bridge_code, &token, &supabase_url, &anon_key).await {
+                warn!("[Config] Failed to push WS token to Supabase: {}", e);
+            } else {
+                info!("[Config] WS token pushed to Supabase");
+            }
+        }
     });
     Ok(())
 }
@@ -81,6 +94,7 @@ pub struct BridgeStatus {
     pub printer_online:    bool,
     pub pending_orders:    usize,
     pub internet_ok:       bool,
+    pub duplicate_hub:     bool,
 }
 
 #[tauri::command]
@@ -95,7 +109,13 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
         use std::time::Duration;
         TcpStream::connect_timeout(&"8.8.8.8:53".parse().unwrap(), Duration::from_secs(2)).is_ok()
     }).await.unwrap_or(false);
-    Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok })
+    let duplicate_hub = *state.duplicate_hub.lock().await;
+    Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok, duplicate_hub })
+}
+
+#[tauri::command]
+async fn get_connected_devices() -> Vec<ws_server::PeerInfo> {
+    ws_server::connected_devices().await
 }
 
 #[tauri::command]
@@ -170,12 +190,33 @@ pub fn run() {
 
             let printer_ip_str = db::config_get(&db, "printer_ip").unwrap_or_default();
             let printer_ip = Arc::new(Mutex::new(printer_ip_str));
-            app.manage(AppState { db: db.clone(), printer_ip: printer_ip.clone() });
+            let duplicate_hub = Arc::new(Mutex::new(false));
+            app.manage(AppState {
+                db: db.clone(),
+                printer_ip: printer_ip.clone(),
+                duplicate_hub: duplicate_hub.clone(),
+            });
 
             #[cfg(not(target_os = "android"))]
             setup_tray(app.handle())?;
 
             let rt = RUNTIME.get().unwrap();
+
+            // Check for a pre-existing hub on the LAN before starting our own.
+            // Connect attempt to venobridge.local:3355; if it succeeds another hub
+            // is already running — set the flag so the UI can warn the user.
+            let dup_flag = duplicate_hub.clone();
+            rt.spawn(async move {
+                let already_running = tokio::time::timeout(
+                    tokio::time::Duration::from_secs(2),
+                    tokio::net::TcpStream::connect("venobridge.local:3355"),
+                ).await.map(|r| r.is_ok()).unwrap_or(false);
+                if already_running {
+                    warn!("[Main] Another VenoApp Bridge detected on LAN — duplicate hub warning set");
+                    *dup_flag.lock().await = true;
+                }
+            });
+
             let db_ws = db.clone();
             let pip_ws = printer_ip.clone();
             rt.spawn(async move { ws_server::start(db_ws, pip_ws).await; });
@@ -199,7 +240,7 @@ pub fn run() {
             info!("[Main] VenoApp Bridge started");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print, resolve_bridge_code])
+        .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print, resolve_bridge_code, get_connected_devices])
         .run(tauri::generate_context!())
         .expect("Error running Tauri application");
 }

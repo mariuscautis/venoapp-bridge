@@ -224,6 +224,26 @@ pub fn run() {
             rt.spawn(async move { supabase::start_sync_loop(db_sync).await; });
             rt.spawn(async move { mdns::start_mdns("VenoApp Bridge"); });
 
+            // Push connection info (token + LAN IP) to Supabase on every startup
+            // so the PWA always has a fresh IP to fall back to when mDNS fails.
+            {
+                let db_push = db.clone();
+                rt.spawn(async move {
+                    let bridge_code  = db::config_get(&db_push, "bridge_code").unwrap_or_default();
+                    let supabase_url = db::config_get(&db_push, "supabase_url").unwrap_or_default();
+                    let anon_key     = db::config_get(&db_push, "supabase_anon_key").unwrap_or_default();
+                    if bridge_code.is_empty() || supabase_url.is_empty() || anon_key.is_empty() {
+                        return; // not yet configured
+                    }
+                    let token = ws_server::get_or_create_token(&db_push);
+                    if let Err(e) = supabase::push_connection_info(&bridge_code, &token, &supabase_url, &anon_key).await {
+                        warn!("[Main] Failed to push connection info on startup: {}", e);
+                    } else {
+                        info!("[Main] Connection info pushed to Supabase on startup");
+                    }
+                });
+            }
+
             #[cfg(not(target_os = "android"))]
             {
                 let setup_done = db::config_get(&db, "setup_complete").map(|v| v == "true").unwrap_or(false);

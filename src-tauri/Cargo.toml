@@ -5,6 +5,11 @@ description = "VenoApp Bridge - Local WebSocket/print bridge for restaurant POS"
 authors = ["Marius Cautis <marius.cautis@gmail.com>"]
 edition = "2021"
 
+[lib]
+name = "venoapp_bridge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+path = "src/lib.rs"
+
 [[bin]]
 name = "venoapp-bridge"
 path = "src/main.rs"

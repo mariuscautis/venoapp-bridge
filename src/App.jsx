@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useState, useCallback } from "react";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -209,6 +210,10 @@ export default function App() {
     supabase_anon_key: DEFAULT_SUPABASE_KEY,
   });
   const [resolving, setResolving]   = useState(false);
+  const [appVersion, setAppVersion] = useState("…");
+
+  // Load version
+  useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
   // Load config on mount
   useEffect(() => {
@@ -556,7 +561,7 @@ export default function App() {
             paddingBottom: 8,
           }}
         >
-          VenoApp Bridge v1.0.0
+          VenoApp Bridge v{appVersion}
         </div>
       </div>
     </div>

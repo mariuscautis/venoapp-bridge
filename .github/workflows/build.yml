@@ -39,6 +39,11 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+
       - name: Install npm dependencies
         run: npm install
 
@@ -104,6 +109,11 @@ jobs:
 
       - name: Install Android NDK r27
         run: sdkmanager "ndk;27.0.11902837"
+
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
 
       - name: Install npm dependencies
         run: npm install

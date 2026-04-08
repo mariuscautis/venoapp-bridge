@@ -19,7 +19,7 @@
         "fullscreen": false,
         "decorations": true,
         "center": true,
-        "visible": false
+        "visible": true
       }
     ],
     "trayIcon": {

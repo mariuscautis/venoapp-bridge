@@ -260,8 +260,12 @@ pub fn run() {
             #[cfg(not(target_os = "android"))]
             {
                 let setup_done = db::config_get(&db, "setup_complete").map(|v| v == "true").unwrap_or(false);
-                if !setup_done {
-                    if let Some(win) = app.get_webview_window("main") {
+                if let Some(win) = app.get_webview_window("main") {
+                    if setup_done {
+                        // Already configured — hide to tray silently
+                        win.hide().ok();
+                    } else {
+                        // First launch — show setup window
                         win.show().ok();
                         win.set_focus().ok();
                     }

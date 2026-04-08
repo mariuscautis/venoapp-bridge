@@ -227,10 +227,8 @@ export default function App() {
         supabase_url:     cfg.supabase_url || DEFAULT_SUPABASE_URL,
         supabase_anon_key: cfg.supabase_anon_key || DEFAULT_SUPABASE_KEY,
       });
-      // Fetch platform logo
-      if (cfg.setup_complete) {
-        invoke("get_logo_url").then((url) => { if (url) setLogoUrl(url); }).catch(() => {});
-      }
+      // Fetch platform logo (always try — supabase config pre-seeded in SQLite)
+      invoke("get_logo_url").then((url) => { if (url) setLogoUrl(url); }).catch(() => {});
     });
   }, []);
 

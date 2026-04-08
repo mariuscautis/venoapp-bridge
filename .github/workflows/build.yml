@@ -64,6 +64,52 @@ jobs:
           name: linux-appimage
           path: venoapp-bridge.AppImage
 
+  # ─── Windows NSIS installer ───────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        run: npm run tauri build -- --bundles nsis --verbose
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          CARGO_TERM_COLOR: always
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          find src-tauri/target/release/bundle/nsis -name "*.exe" \
+            -exec cp {} venoapp-bridge.exe \;
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: venoapp-bridge.exe
+
   # ─── Android APK ──────────────────────────────────────────────────────────
   build-android:
     runs-on: ubuntu-22.04
@@ -145,7 +191,7 @@ jobs:
 
   # ─── Create GitHub Release ────────────────────────────────────────────────
   release:
-    needs: [build-linux, build-android]
+    needs: [build-linux, build-windows, build-android]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -154,6 +200,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: linux-appimage
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
 
       - name: Download Android artifact
         uses: actions/download-artifact@v4
@@ -171,14 +222,16 @@ jobs:
 
             | Platform | Download |
             |----------|----------|
-            | Android tablet | `venoapp-bridge.apk` |
+            | Windows PC | `venoapp-bridge.exe` |
             | Linux PC / Raspberry Pi | `venoapp-bridge.AppImage` |
+            | Android (not recommended) | `venoapp-bridge.apk` |
 
-            **Android:** Download the APK, open it on your tablet to install.
-            **Linux:** Download the AppImage, make it executable (`chmod +x`), double-click to run.
+            **Windows:** Run the installer (.exe). If SmartScreen warns you, click "More info" → "Run anyway".
+            **Linux / Raspberry Pi:** Download the AppImage, make it executable (`chmod +x`), then run it.
 
             After installing, open VenoApp Bridge once to enter your restaurant code and printer IP. It will run silently in the background from then on.
           files: |
+            venoapp-bridge.exe
             venoapp-bridge.AppImage
             venoapp-bridge.apk
           draft: false

@@ -13,11 +13,13 @@ use once_cell::sync::OnceCell;
 use printer::check_printer_online;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+#[cfg(not(target_os = "android"))]
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, State,
+    AppHandle,
 };
+use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
 pub struct AppState {
@@ -131,11 +133,17 @@ pub fn run() {
         .expect("Tokio runtime failed");
     RUNTIME.set(runtime).expect("Runtime already set");
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::init(
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(not(target_os = "android"))]
+    {
+        builder = builder.plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ))
+        ));
+    }
+
+    builder
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir().expect("Cannot resolve app data dir");
@@ -163,16 +171,15 @@ pub fn run() {
             rt.spawn(async move { supabase::start_sync_loop(db_sync).await; });
             rt.spawn(async move { mdns::start_mdns("VenoApp Bridge"); });
 
-            let setup_done = db::config_get(&db, "setup_complete").map(|v| v == "true").unwrap_or(false);
-            if !setup_done {
-                if let Some(win) = app.get_webview_window("main") {
-                    win.show().ok();
-                    win.set_focus().ok();
-                }
-            }
-
             #[cfg(not(target_os = "android"))]
             {
+                let setup_done = db::config_get(&db, "setup_complete").map(|v| v == "true").unwrap_or(false);
+                if !setup_done {
+                    if let Some(win) = app.get_webview_window("main") {
+                        win.show().ok();
+                        win.set_focus().ok();
+                    }
+                }
                 use tauri_plugin_autostart::ManagerExt;
                 app.autolaunch().enable().ok();
             }

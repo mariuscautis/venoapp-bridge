@@ -45,9 +45,6 @@ pub async fn resolve_bridge_code(code: &str) -> Result<(String, String), String>
     Ok((restaurant_id, name))
 }
 
-/// Push the WebSocket auth token and hub LAN IP to Supabase.
-/// The PWA uses the IP to connect directly when venobridge.local mDNS fails
-/// (Windows / Android browsers don't resolve .local hostnames).
 /// Fetch the platform logo URL from Supabase branding settings.
 pub async fn fetch_logo_url(supabase_url: &str, anon_key: &str) -> Option<String> {
     let client = Client::builder().timeout(Duration::from_secs(8)).build().ok()?;
@@ -61,36 +58,56 @@ pub async fn fetch_logo_url(supabase_url: &str, anon_key: &str) -> Option<String
     rows.first()?.get("value")?.get("logo_url")?.as_str().map(|s| s.to_string())
 }
 
+/// Push WS token + LAN IP to Supabase so the PWA can find and authenticate with the Bridge.
+/// Tries RPC first (SECURITY DEFINER bypasses RLS), then direct PATCH as fallback.
 pub async fn push_connection_info(bridge_code: &str, token: &str, supabase_url: &str, anon_key: &str) -> Result<(), String> {
     let hub_ip = get_local_ip();
+    let code   = bridge_code.replace('-', "").to_uppercase();
 
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())?;
 
+    // 1. Try RPC (SECURITY DEFINER — bypasses RLS)
     let rpc_url = format!("{}/rest/v1/rpc/set_bridge_connection", supabase_url);
-    let resp = client
+    match client
         .post(&rpc_url)
         .header("apikey", anon_key)
         .header("Authorization", format!("Bearer {}", anon_key))
         .header("Content-Type", "application/json")
-        .json(&serde_json::json!({
-            "p_bridge_code": bridge_code,
-            "p_token":       token,
-            "p_hub_ip":      hub_ip,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        return Err(format!("HTTP {}: {}", status, text));
+        .json(&serde_json::json!({ "p_bridge_code": &code, "p_token": token, "p_hub_ip": &hub_ip }))
+        .send().await
+    {
+        Ok(r) if r.status().is_success() => {
+            info!("[Supabase] push_connection_info RPC ok (ip={})", hub_ip);
+            return Ok(());
+        }
+        Ok(r) => warn!("[Supabase] RPC failed HTTP {}: {}", r.status(), r.text().await.unwrap_or_default()),
+        Err(e) => warn!("[Supabase] RPC network error: {}", e),
     }
 
-    Ok(())
+    // 2. Fallback: direct PATCH on restaurants table
+    let patch_url = format!("{}/rest/v1/restaurants?bridge_code=eq.{}", supabase_url, code);
+    let patch_resp = client
+        .patch(&patch_url)
+        .header("apikey", anon_key)
+        .header("Authorization", format!("Bearer {}", anon_key))
+        .header("Content-Type", "application/json")
+        .header("Prefer", "return=minimal")
+        .json(&serde_json::json!({ "bridge_ws_token": token, "bridge_hub_ip": &hub_ip }))
+        .send()
+        .await
+        .map_err(|e| format!("PATCH network error: {}", e))?;
+
+    if patch_resp.status().is_success() {
+        info!("[Supabase] push_connection_info PATCH ok (ip={})", hub_ip);
+        Ok(())
+    } else {
+        let status = patch_resp.status();
+        let body   = patch_resp.text().await.unwrap_or_default();
+        Err(format!("PATCH HTTP {}: {}", status, body))
+    }
 }
 
 pub fn get_local_ip() -> String {

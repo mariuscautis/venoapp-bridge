@@ -37,16 +37,16 @@ pub fn start_mdns(instance_name: &str) -> Option<MdnsHandle> {
         return None;
     }
 
-    let props: HashMap<&str, &str> = [("version", "1.0.0"), ("app", "venoapp-bridge")]
+    let props: HashMap<String, String> = [("version", "1.0.0"), ("app", "venoapp-bridge")]
         .iter()
-        .cloned()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
 
     let service = match ServiceInfo::new(
         SERVICE_TYPE,
         instance_name,
         HOSTNAME,
-        &my_addrs[..],
+        my_addrs[0],
         PORT,
         props,
     ) {

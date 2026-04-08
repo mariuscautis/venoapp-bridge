@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State,
+    AppHandle, Manager, State,
 };
 use tokio::sync::Mutex;
 

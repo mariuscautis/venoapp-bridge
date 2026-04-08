@@ -46,7 +46,7 @@ pub fn start_mdns(instance_name: &str) -> Option<MdnsHandle> {
         SERVICE_TYPE,
         instance_name,
         HOSTNAME,
-        my_addrs[0],
+        std::net::IpAddr::V4(my_addrs[0]),
         PORT,
         props,
     ) {

@@ -48,6 +48,19 @@ pub async fn resolve_bridge_code(code: &str) -> Result<(String, String), String>
 /// Push the WebSocket auth token and hub LAN IP to Supabase.
 /// The PWA uses the IP to connect directly when venobridge.local mDNS fails
 /// (Windows / Android browsers don't resolve .local hostnames).
+/// Fetch the platform logo URL from Supabase branding settings.
+pub async fn fetch_logo_url(supabase_url: &str, anon_key: &str) -> Option<String> {
+    let client = Client::builder().timeout(Duration::from_secs(8)).build().ok()?;
+    let url = format!("{}/rest/v1/platform_settings?key=eq.branding&select=value", supabase_url);
+    let resp = client
+        .get(&url)
+        .header("apikey", anon_key)
+        .header("Authorization", format!("Bearer {}", anon_key))
+        .send().await.ok()?;
+    let rows: Vec<serde_json::Value> = resp.json().await.ok()?;
+    rows.first()?.get("value")?.get("logo_url")?.as_str().map(|s| s.to_string())
+}
+
 pub async fn push_connection_info(bridge_code: &str, token: &str, supabase_url: &str, anon_key: &str) -> Result<(), String> {
     let hub_ip = get_local_ip();
 
@@ -80,7 +93,7 @@ pub async fn push_connection_info(bridge_code: &str, token: &str, supabase_url: 
     Ok(())
 }
 
-fn get_local_ip() -> String {
+pub fn get_local_ip() -> String {
     use std::net::UdpSocket;
     // Connect to an external address to let the OS pick the right interface.
     // No packets are actually sent.

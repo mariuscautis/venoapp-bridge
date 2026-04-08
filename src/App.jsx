@@ -194,6 +194,7 @@ const DEFAULT_SUPABASE_KEY =
 export default function App() {
   const [config, setConfig]         = useState(null);
   const [status, setStatus]         = useState(null);
+  const [logoUrl, setLogoUrl]       = useState("");
   const [editMode, setEditMode]     = useState(false);
   const [saving, setSaving]         = useState(false);
   const [testing, setTesting]       = useState(false);
@@ -221,6 +222,10 @@ export default function App() {
         supabase_url:     cfg.supabase_url || DEFAULT_SUPABASE_URL,
         supabase_anon_key: cfg.supabase_anon_key || DEFAULT_SUPABASE_KEY,
       });
+      // Fetch platform logo
+      if (cfg.setup_complete) {
+        invoke("get_logo_url").then((url) => { if (url) setLogoUrl(url); }).catch(() => {});
+      }
     });
   }, []);
 
@@ -281,6 +286,7 @@ export default function App() {
       setEditMode(false);
       setSaveOk(`Connected to ${restaurantName}. Bridge is now active.`);
       setTimeout(() => setSaveOk(""), 5000);
+      invoke("get_logo_url").then((url) => { if (url) setLogoUrl(url); }).catch(() => {});
     } catch (e) {
       setSaveError(String(e));
     } finally {
@@ -318,11 +324,18 @@ export default function App() {
     <div style={s.container}>
       {/* Header */}
       <div style={s.header}>
-        <div style={s.logo}>V</div>
+        <div style={s.logo}>
+          {logoUrl
+            ? <img src={logoUrl} alt="Logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 4 }} />
+            : "V"
+          }
+        </div>
         <div>
           <div style={s.headerTitle}>VenoApp Bridge</div>
           <div style={s.headerSub}>
-            {isSetup ? "Running · ws://venobridge.local:3355" : "Setup required"}
+            {isSetup
+              ? status?.hub_ip ? `Running · ws://${status.hub_ip}:3355` : "Running · port 3355"
+              : "Setup required"}
           </div>
         </div>
       </div>
@@ -408,7 +421,9 @@ export default function App() {
                 <div style={s.bigStatusSub}>
                   {status?.pending_orders > 0
                     ? "Offline — will sync when internet returns"
-                    : "Listening on ws://venobridge.local:3355"}
+                    : status?.hub_ip
+                      ? `ws://${status.hub_ip}:3355`
+                      : "Listening on port 3355"}
                 </div>
               </div>
             </div>
@@ -446,7 +461,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div style={{ ...s.statusRow, borderBottom: "none" }}>
+              <div style={s.statusRow}>
                 <span style={s.statusLabel}>
                   <span
                     style={s.dot(
@@ -462,6 +477,26 @@ export default function App() {
                   }}
                 >
                   {status?.internet_ok ? "Connected" : "Offline"}
+                </span>
+              </div>
+
+              <div style={s.statusRow}>
+                <span style={s.statusLabel}>
+                  <span style={s.dot(colors.brand)} />
+                  Hub IP
+                </span>
+                <span style={{ ...s.statusValue, color: colors.muted, fontFamily: "monospace", fontSize: 13 }}>
+                  {status?.hub_ip || "—"}
+                </span>
+              </div>
+
+              <div style={{ ...s.statusRow, borderBottom: "none" }}>
+                <span style={s.statusLabel}>
+                  <span style={s.dot(colors.muted)} />
+                  Auth Token
+                </span>
+                <span style={{ ...s.statusValue, color: colors.muted, fontFamily: "monospace", fontSize: 12 }}>
+                  {status?.ws_token ? status.ws_token.slice(0, 8) + "…" : "—"}
                 </span>
               </div>
             </div>

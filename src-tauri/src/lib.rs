@@ -95,6 +95,8 @@ pub struct BridgeStatus {
     pub pending_orders:    usize,
     pub internet_ok:       bool,
     pub duplicate_hub:     bool,
+    pub hub_ip:            String,
+    pub ws_token:          String,
 }
 
 #[tauri::command]
@@ -110,12 +112,22 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
         TcpStream::connect_timeout(&"8.8.8.8:53".parse().unwrap(), Duration::from_secs(2)).is_ok()
     }).await.unwrap_or(false);
     let duplicate_hub = *state.duplicate_hub.lock().await;
-    Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok, duplicate_hub })
+    let hub_ip  = supabase::get_local_ip();
+    let ws_token = ws_server::get_or_create_token(&state.db);
+    Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok, duplicate_hub, hub_ip, ws_token })
 }
 
 #[tauri::command]
 async fn get_connected_devices() -> Vec<ws_server::PeerInfo> {
     ws_server::connected_devices().await
+}
+
+#[tauri::command]
+async fn get_logo_url(state: State<'_, AppState>) -> Result<String, String> {
+    let url = db::config_get(&state.db, "supabase_url").unwrap_or_default();
+    let key = db::config_get(&state.db, "supabase_anon_key").unwrap_or_default();
+    if url.is_empty() || key.is_empty() { return Ok(String::new()); }
+    Ok(supabase::fetch_logo_url(&url, &key).await.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -260,7 +272,7 @@ pub fn run() {
             info!("[Main] VenoApp Bridge started");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print, resolve_bridge_code, get_connected_devices])
+        .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print, resolve_bridge_code, get_connected_devices, get_logo_url])
         .run(tauri::generate_context!())
         .expect("Error running Tauri application");
 }

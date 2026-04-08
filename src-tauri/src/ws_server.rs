@@ -160,9 +160,14 @@ async fn handle_connection(
         }
     };
 
-    // Check token
-    if first.token.as_deref() != Some(auth_token.as_str()) {
-        warn!("[WS] Peer {} rejected — wrong token", peer_ip);
+    // Check token — skip auth if no token is stored yet (first-run / DB write failed)
+    let token_required = !auth_token.is_empty();
+    if token_required && first.token.as_deref() != Some(auth_token.as_str()) {
+        warn!("[WS] Peer {} rejected — wrong token (expected: {}…, got: {:?})",
+            peer_ip,
+            &auth_token[..auth_token.len().min(6)],
+            first.token.as_deref().map(|t| &t[..t.len().min(6)])
+        );
         let _ = ws_sink.send(Message::Text(
             json!({"type":"bridge:auth_failed","reason":"Invalid token"}).to_string()
         )).await;

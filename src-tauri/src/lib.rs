@@ -112,10 +112,26 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
         TcpStream::connect_timeout(&"8.8.8.8:53".parse().unwrap(), Duration::from_secs(2)).is_ok()
     }).await.unwrap_or(false);
     let duplicate_hub = *state.duplicate_hub.lock().await;
-    let hub_ip = tokio::task::spawn_blocking(supabase::get_local_ip).await.unwrap_or_default();
-    let db_for_token = state.db.clone();
-    let ws_token = tokio::task::spawn_blocking(move || ws_server::get_or_create_token(&db_for_token))
-        .await.unwrap_or_default();
+    let hub_ip   = tokio::task::spawn_blocking(supabase::get_local_ip).await.unwrap_or_default();
+    let ws_token = db::config_get(&state.db, "ws_auth_token").unwrap_or_default();
+
+    // Re-push connection info on every status poll so Supabase stays current
+    // even if the startup push failed (e.g. no internet at launch time).
+    if !ws_token.is_empty() && internet_ok {
+        let bridge_code  = db::config_get(&state.db, "bridge_code").unwrap_or_default();
+        let supabase_url = db::config_get(&state.db, "supabase_url").unwrap_or_default();
+        let anon_key     = db::config_get(&state.db, "supabase_anon_key").unwrap_or_default();
+        if !bridge_code.is_empty() {
+            let token_c = ws_token.clone();
+            let ip_c    = hub_ip.clone();
+            tokio::spawn(async move {
+                if let Err(e) = supabase::push_connection_info(&bridge_code, &token_c, &supabase_url, &anon_key).await {
+                    warn!("[Status] push_connection_info: {}", e);
+                }
+            });
+        }
+    }
+
     Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok, duplicate_hub, hub_ip, ws_token })
 }
 

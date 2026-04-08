@@ -200,18 +200,23 @@ export default function App() {
   const [saveError, setSaveError]   = useState("");
   const [saveOk, setSaveOk]         = useState("");
   const [form, setForm]             = useState({
+    bridge_code:       "",
     restaurant_id:    "",
+    restaurant_name:  "",
     printer_ip:       "",
     supabase_url:     DEFAULT_SUPABASE_URL,
     supabase_anon_key: DEFAULT_SUPABASE_KEY,
   });
+  const [resolving, setResolving]   = useState(false);
 
   // Load config on mount
   useEffect(() => {
     invoke("get_config").then((cfg) => {
       setConfig(cfg);
       setForm({
+        bridge_code:      cfg.bridge_code || "",
         restaurant_id:    cfg.restaurant_id || "",
+        restaurant_name:  cfg.restaurant_name || "",
         printer_ip:       cfg.printer_ip || "",
         supabase_url:     cfg.supabase_url || DEFAULT_SUPABASE_URL,
         supabase_anon_key: cfg.supabase_anon_key || DEFAULT_SUPABASE_KEY,
@@ -236,21 +241,51 @@ export default function App() {
     setSaveError("");
     setSaveOk("");
     try {
+      // Resolve bridge code → restaurant_id if code changed or restaurant_id not set
+      let restaurantId   = form.restaurant_id;
+      let restaurantName = form.restaurant_name;
+      const code = form.bridge_code.trim();
+
+      if (code && (!restaurantId || editMode)) {
+        setResolving(true);
+        try {
+          const result = await invoke("resolve_bridge_code", { code });
+          restaurantId   = result.restaurant_id;
+          restaurantName = result.name;
+        } catch (e) {
+          setSaveError(String(e));
+          setSaving(false);
+          setResolving(false);
+          return;
+        }
+        setResolving(false);
+      }
+
+      if (!restaurantId) {
+        setSaveError("Please enter a valid restaurant code.");
+        setSaving(false);
+        return;
+      }
+
       await invoke("save_config", {
         config: {
           ...form,
-          setup_complete: true,
+          bridge_code:     code,
+          restaurant_id:   restaurantId,
+          restaurant_name: restaurantName,
+          setup_complete:  true,
         },
       });
       const updated = await invoke("get_config");
       setConfig(updated);
       setEditMode(false);
-      setSaveOk("Settings saved. Bridge is now active.");
-      setTimeout(() => setSaveOk(""), 4000);
+      setSaveOk(`Connected to ${restaurantName}. Bridge is now active.`);
+      setTimeout(() => setSaveOk(""), 5000);
     } catch (e) {
       setSaveError(String(e));
     } finally {
       setSaving(false);
+      setResolving(false);
     }
   };
 
@@ -302,11 +337,20 @@ export default function App() {
 
             <label style={{ ...s.label, marginTop: 0 }}>Restaurant Code</label>
             <input
-              style={s.input}
-              placeholder="e.g. rest_abc123"
-              value={form.restaurant_id}
-              onChange={(e) => setForm((f) => ({ ...f, restaurant_id: e.target.value }))}
+              style={{ ...s.input, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, fontSize: 16 }}
+              placeholder="XXXX-XXXX"
+              value={form.bridge_code}
+              maxLength={9}
+              onChange={(e) => {
+                // Auto-insert dash after 4 chars
+                let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                if (v.length > 4) v = v.slice(0, 4) + "-" + v.slice(4, 8);
+                setForm((f) => ({ ...f, bridge_code: v, restaurant_id: "", restaurant_name: "" }));
+              }}
             />
+            <div style={{ fontSize: 11, color: colors.muted, marginTop: 5 }}>
+              Found in VenoApp → Settings → Offline Hub
+            </div>
 
             <label style={s.label}>Printer IP Address</label>
             <input
@@ -344,7 +388,7 @@ export default function App() {
               disabled={saving}
               onClick={handleSave}
             >
-              {saving ? "Saving…" : "Save & Start"}
+              {resolving ? "Verifying code…" : saving ? "Saving…" : "Save & Start"}
             </button>
 
             {editMode && (
@@ -443,8 +487,12 @@ export default function App() {
               <div style={s.cardTitle}>Configuration</div>
               <div style={{ fontSize: 13, lineHeight: 1.8, color: colors.muted }}>
                 <div>
-                  <strong style={{ color: colors.text }}>Restaurant ID:</strong>{" "}
-                  {config.restaurant_id || <em>not set</em>}
+                  <strong style={{ color: colors.text }}>Restaurant:</strong>{" "}
+                  {config.restaurant_name || config.restaurant_id || <em>not set</em>}
+                </div>
+                <div>
+                  <strong style={{ color: colors.text }}>Bridge Code:</strong>{" "}
+                  {config.bridge_code || <em>not set</em>}
                 </div>
                 <div>
                   <strong style={{ color: colors.text }}>Printer IP:</strong>{" "}

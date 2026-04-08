@@ -31,7 +31,9 @@ static RUNTIME: OnceCell<tokio::runtime::Runtime> = OnceCell::new();
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BridgeConfig {
+    pub bridge_code:       String,
     pub restaurant_id:     String,
+    pub restaurant_name:   String,
     pub printer_ip:        String,
     pub supabase_url:      String,
     pub supabase_anon_key: String,
@@ -42,7 +44,9 @@ pub struct BridgeConfig {
 fn get_config(state: State<AppState>) -> BridgeConfig {
     let db = &state.db;
     BridgeConfig {
+        bridge_code:       db::config_get(db, "bridge_code").unwrap_or_default(),
         restaurant_id:     db::config_get(db, "restaurant_id").unwrap_or_default(),
+        restaurant_name:   db::config_get(db, "restaurant_name").unwrap_or_default(),
         printer_ip:        db::config_get(db, "printer_ip").unwrap_or_default(),
         supabase_url:      db::config_get(db, "supabase_url").unwrap_or_default(),
         supabase_anon_key: db::config_get(db, "supabase_anon_key").unwrap_or_default(),
@@ -55,7 +59,9 @@ fn get_config(state: State<AppState>) -> BridgeConfig {
 #[tauri::command]
 fn save_config(state: State<AppState>, config: BridgeConfig) -> Result<(), String> {
     let db = &state.db;
+    db::config_set(db, "bridge_code",       &config.bridge_code).map_err(|e| e.to_string())?;
     db::config_set(db, "restaurant_id",     &config.restaurant_id).map_err(|e| e.to_string())?;
+    db::config_set(db, "restaurant_name",   &config.restaurant_name).map_err(|e| e.to_string())?;
     db::config_set(db, "printer_ip",        &config.printer_ip).map_err(|e| e.to_string())?;
     db::config_set(db, "supabase_url",      &config.supabase_url).map_err(|e| e.to_string())?;
     db::config_set(db, "supabase_anon_key", &config.supabase_anon_key).map_err(|e| e.to_string())?;
@@ -90,6 +96,12 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
         TcpStream::connect_timeout(&"8.8.8.8:53".parse().unwrap(), Duration::from_secs(2)).is_ok()
     }).await.unwrap_or(false);
     Ok(BridgeStatus { connected_devices, printer_online, pending_orders, internet_ok })
+}
+
+#[tauri::command]
+async fn resolve_bridge_code(code: String) -> Result<serde_json::Value, String> {
+    let (restaurant_id, name) = supabase::resolve_bridge_code(&code).await?;
+    Ok(serde_json::json!({ "restaurant_id": restaurant_id, "name": name }))
 }
 
 #[tauri::command]
@@ -187,7 +199,7 @@ pub fn run() {
             info!("[Main] VenoApp Bridge started");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print])
+        .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print, resolve_bridge_code])
         .run(tauri::generate_context!())
         .expect("Error running Tauri application");
 }

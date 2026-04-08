@@ -7,6 +7,43 @@ use std::time::Duration;
 use tokio::time;
 
 const POLL_INTERVAL_SECS: u64 = 10;
+const VENOAPP_API: &str = "https://www.venoapp.com/api/bridge";
+
+/// Exchange a bridge code (e.g. "ABCD-EF23") for a restaurant_id.
+/// Returns (restaurant_id, restaurant_name) on success.
+pub async fn resolve_bridge_code(code: &str) -> Result<(String, String), String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .post(VENOAPP_API)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "code": code }))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if resp.status().as_u16() == 404 {
+        return Err("Invalid bridge code — please check and try again.".into());
+    }
+
+    if !resp.status().is_success() {
+        return Err(format!("Server error: {}", resp.status()));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    if let Some(err) = data.get("error") {
+        return Err(err.as_str().unwrap_or("Unknown error").to_string());
+    }
+
+    let restaurant_id = data["restaurant_id"].as_str().ok_or("Missing restaurant_id")?.to_string();
+    let name = data["name"].as_str().unwrap_or("Your Restaurant").to_string();
+
+    Ok((restaurant_id, name))
+}
 
 pub async fn start_sync_loop(db: Db) {
     let client = Client::builder()

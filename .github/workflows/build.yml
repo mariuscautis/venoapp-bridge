@@ -1,0 +1,164 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+
+  # ─── Linux AppImage ────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Linux AppImage
+        run: npm run tauri build -- --bundles appimage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - name: Rename artifact
+        run: |
+          find src-tauri/target/release/bundle/appimage -name "*.AppImage" \
+            -exec cp {} venoapp-bridge.AppImage \;
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: venoapp-bridge.AppImage
+
+  # ─── Android APK ──────────────────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Android targets
+        run: |
+          rustup target add \
+            aarch64-linux-android \
+            armv7-linux-androideabi \
+            x86_64-linux-android \
+            i686-linux-android
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.0.11902837"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Initialize Tauri Android
+        run: npm run tauri android init
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.11902837
+
+      - name: Build Android APK (unsigned)
+        run: npm run tauri android build -- --apk
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.11902837
+
+      - name: Rename artifact
+        run: |
+          find src-tauri/gen/android -name "*.apk" \
+            | head -1 \
+            | xargs -I{} cp {} venoapp-bridge.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: venoapp-bridge.apk
+
+  # ─── Create GitHub Release ────────────────────────────────────────────────
+  release:
+    needs: [build-linux, build-android]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-appimage
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VenoApp Bridge ${{ github.ref_name }}
+          body: |
+            ## VenoApp Bridge ${{ github.ref_name }}
+
+            ### Install on your venue device
+
+            | Platform | Download |
+            |----------|----------|
+            | Android tablet | `venoapp-bridge.apk` |
+            | Linux PC / Raspberry Pi | `venoapp-bridge.AppImage` |
+
+            **Android:** Download the APK, open it on your tablet to install.
+            **Linux:** Download the AppImage, make it executable (`chmod +x`), double-click to run.
+
+            After installing, open VenoApp Bridge once to enter your restaurant code and printer IP. It will run silently in the background from then on.
+          files: |
+            venoapp-bridge.AppImage
+            venoapp-bridge.apk
+          draft: false
+          prerelease: false

@@ -78,10 +78,10 @@ fn save_config(state: State<AppState>, config: BridgeConfig) -> Result<(), Strin
     RUNTIME.get().unwrap().spawn(async move {
         *pip.lock().await = ip;
         if !bridge_code.is_empty() && !supabase_url.is_empty() && !anon_key.is_empty() {
-            if let Err(e) = supabase::push_ws_token(&bridge_code, &token, &supabase_url, &anon_key).await {
-                warn!("[Config] Failed to push WS token to Supabase: {}", e);
+            if let Err(e) = supabase::push_connection_info(&bridge_code, &token, &supabase_url, &anon_key).await {
+                warn!("[Config] Failed to push connection info to Supabase: {}", e);
             } else {
-                info!("[Config] WS token pushed to Supabase");
+                info!("[Config] Connection info (token + IP) pushed to Supabase");
             }
         }
     });

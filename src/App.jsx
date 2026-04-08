@@ -360,22 +360,6 @@ export default function App() {
               onChange={(e) => setForm((f) => ({ ...f, printer_ip: e.target.value }))}
             />
 
-            <label style={s.label}>Supabase URL</label>
-            <input
-              style={s.input}
-              value={form.supabase_url}
-              onChange={(e) => setForm((f) => ({ ...f, supabase_url: e.target.value }))}
-            />
-
-            <label style={s.label}>Supabase Anon Key</label>
-            <input
-              style={{ ...s.input, fontFamily: "monospace", fontSize: 11 }}
-              value={form.supabase_anon_key}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, supabase_anon_key: e.target.value }))
-              }
-            />
-
             {saveError && <div style={s.error}>{saveError}</div>}
             {saveOk    && <div style={s.success}>{saveOk}</div>}
 
@@ -497,12 +481,6 @@ export default function App() {
                 <div>
                   <strong style={{ color: colors.text }}>Printer IP:</strong>{" "}
                   {config.printer_ip || <em>not set</em>}
-                </div>
-                <div>
-                  <strong style={{ color: colors.text }}>Supabase:</strong>{" "}
-                  {config.supabase_url
-                    ? config.supabase_url.replace("https://", "")
-                    : <em>not set</em>}
                 </div>
               </div>
 

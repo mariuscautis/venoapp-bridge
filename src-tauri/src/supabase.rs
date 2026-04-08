@@ -45,21 +45,28 @@ pub async fn resolve_bridge_code(code: &str) -> Result<(String, String), String>
     Ok((restaurant_id, name))
 }
 
-/// Push the WebSocket auth token to Supabase so the PWA can authenticate.
-/// Called once after setup is saved.
-pub async fn push_ws_token(bridge_code: &str, token: &str, supabase_url: &str, anon_key: &str) -> Result<(), String> {
+/// Push the WebSocket auth token and hub LAN IP to Supabase.
+/// The PWA uses the IP to connect directly when venobridge.local mDNS fails
+/// (Windows / Android browsers don't resolve .local hostnames).
+pub async fn push_connection_info(bridge_code: &str, token: &str, supabase_url: &str, anon_key: &str) -> Result<(), String> {
+    let hub_ip = get_local_ip();
+
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let rpc_url = format!("{}/rest/v1/rpc/set_bridge_ws_token", supabase_url);
+    let rpc_url = format!("{}/rest/v1/rpc/set_bridge_connection", supabase_url);
     let resp = client
         .post(&rpc_url)
         .header("apikey", anon_key)
         .header("Authorization", format!("Bearer {}", anon_key))
         .header("Content-Type", "application/json")
-        .json(&serde_json::json!({ "p_bridge_code": bridge_code, "p_token": token }))
+        .json(&serde_json::json!({
+            "p_bridge_code": bridge_code,
+            "p_token":       token,
+            "p_hub_ip":      hub_ip,
+        }))
         .send()
         .await
         .map_err(|e| format!("Network error: {}", e))?;
@@ -71,6 +78,20 @@ pub async fn push_ws_token(bridge_code: &str, token: &str, supabase_url: &str, a
     }
 
     Ok(())
+}
+
+fn get_local_ip() -> String {
+    use std::net::UdpSocket;
+    // Connect to an external address to let the OS pick the right interface.
+    // No packets are actually sent.
+    if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+        if sock.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = sock.local_addr() {
+                return addr.ip().to_string();
+            }
+        }
+    }
+    "unknown".to_string()
 }
 
 pub async fn start_sync_loop(db: Db) {

@@ -113,7 +113,8 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
     }).await.unwrap_or(false);
     let duplicate_hub = *state.duplicate_hub.lock().await;
     let hub_ip   = tokio::task::spawn_blocking(supabase::get_local_ip).await.unwrap_or_default();
-    let ws_token = db::config_get(&state.db, "ws_auth_token").unwrap_or_default();
+    // Read from in-memory global — guaranteed to be set even if SQLite write failed
+    let ws_token = ws_server::active_token();
 
     // Re-push connection info on every status poll so Supabase stays current
     // even if the startup push failed (e.g. no internet at launch time).
@@ -123,7 +124,6 @@ async fn get_status(state: State<'_, AppState>) -> Result<BridgeStatus, String> 
         let anon_key     = db::config_get(&state.db, "supabase_anon_key").unwrap_or_default();
         if !bridge_code.is_empty() {
             let token_c = ws_token.clone();
-            let ip_c    = hub_ip.clone();
             tokio::spawn(async move {
                 if let Err(e) = supabase::push_connection_info(&bridge_code, &token_c, &supabase_url, &anon_key).await {
                     warn!("[Status] push_connection_info: {}", e);
@@ -254,25 +254,8 @@ pub fn run() {
             rt.spawn(async move { supabase::start_sync_loop(db_sync).await; });
             rt.spawn(async move { mdns::start_mdns("VenoApp Bridge"); });
 
-            // Push connection info (token + LAN IP) to Supabase on every startup
-            // so the PWA always has a fresh IP to fall back to when mDNS fails.
-            {
-                let db_push = db.clone();
-                rt.spawn(async move {
-                    let bridge_code  = db::config_get(&db_push, "bridge_code").unwrap_or_default();
-                    let supabase_url = db::config_get(&db_push, "supabase_url").unwrap_or_default();
-                    let anon_key     = db::config_get(&db_push, "supabase_anon_key").unwrap_or_default();
-                    if bridge_code.is_empty() || supabase_url.is_empty() || anon_key.is_empty() {
-                        return; // not yet configured
-                    }
-                    let token = ws_server::get_or_create_token(&db_push);
-                    if let Err(e) = supabase::push_connection_info(&bridge_code, &token, &supabase_url, &anon_key).await {
-                        warn!("[Main] Failed to push connection info on startup: {}", e);
-                    } else {
-                        info!("[Main] Connection info pushed to Supabase on startup");
-                    }
-                });
-            }
+            // Connection info (token + IP) is pushed to Supabase on each get_status
+            // poll (every 4s) once the WS server has set the active token.
 
             #[cfg(not(target_os = "android"))]
             {

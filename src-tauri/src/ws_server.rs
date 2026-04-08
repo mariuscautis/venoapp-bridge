@@ -29,6 +29,14 @@ static PEER_MAP: Lazy<PeerMap> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new(
 static PEER_COUNTER: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(1);
 
+// The active auth token held in memory — set once at startup, readable from any command.
+static ACTIVE_TOKEN: Lazy<std::sync::RwLock<String>> =
+    Lazy::new(|| std::sync::RwLock::new(String::new()));
+
+pub fn active_token() -> String {
+    ACTIVE_TOKEN.read().unwrap().clone()
+}
+
 // ── Message types ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -96,7 +104,9 @@ async fn broadcast(sender_id: u64, msg: Message) {
 
 pub async fn start(db: Db, printer_ip: Arc<Mutex<String>>) {
     let auth_token = get_or_create_token(&db);
-    info!("[WS] Auth token ready ({}...)", &auth_token[..6]);
+    info!("[WS] Auth token ready ({}...)", if auth_token.len() >= 6 { &auth_token[..6] } else { &auth_token });
+    // Store in global so get_status can read it without SQLite
+    *ACTIVE_TOKEN.write().unwrap() = auth_token.clone();
 
     let addr = "0.0.0.0:3355";
     let listener = match TcpListener::bind(addr).await {

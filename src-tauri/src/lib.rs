@@ -208,6 +208,14 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            // Write a startup marker so we can confirm the process launched on Windows
+            #[cfg(target_os = "windows")]
+            {
+                let desktop = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Public".into());
+                let log_path = format!("{}\\Desktop\\venobridge-startup.txt", desktop);
+                let _ = std::fs::write(&log_path, format!("VenoApp Bridge started at {:?}\n", std::time::SystemTime::now()));
+            }
+
             let data_dir = app.path().app_data_dir().expect("Cannot resolve app data dir");
             let db = db::open(data_dir).expect("Failed to open SQLite DB");
 
@@ -228,7 +236,9 @@ pub fn run() {
             });
 
             #[cfg(not(target_os = "android"))]
-            setup_tray(app.handle())?;
+            if let Err(e) = setup_tray(app.handle()) {
+                warn!("[Main] Tray setup failed: {}", e);
+            }
 
             let rt = RUNTIME.get().unwrap();
 

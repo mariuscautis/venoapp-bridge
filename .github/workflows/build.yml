@@ -92,23 +92,30 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Build Windows installer
-        run: npm run tauri build -- --bundles nsis --verbose
+      - name: Build Windows
+        run: npm run tauri build -- --bundles nsis,msi --verbose
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           CARGO_TERM_COLOR: always
 
-      - name: Rename artifact
+      - name: Copy artifacts
         shell: bash
         run: |
           find src-tauri/target/release/bundle/nsis -name "*.exe" \
-            -exec cp {} venoapp-bridge.exe \;
+            -exec cp {} venoapp-bridge-setup.exe \; 2>/dev/null || true
+          cp src-tauri/target/release/venoapp-bridge.exe venoapp-bridge-portable.exe 2>/dev/null || true
 
-      - name: Upload artifact
+      - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: venoapp-bridge.exe
+          path: venoapp-bridge-setup.exe
+
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: venoapp-bridge-portable.exe
 
   # ─── Create GitHub Release ────────────────────────────────────────────────
   release:
@@ -122,10 +129,15 @@ jobs:
         with:
           name: linux-appimage
 
-      - name: Download Windows artifact
+      - name: Download Windows installer
         uses: actions/download-artifact@v4
         with:
           name: windows-installer
+
+      - name: Download Windows portable
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-portable
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -138,15 +150,18 @@ jobs:
 
             | Platform | Download |
             |----------|----------|
-            | Windows PC | `venoapp-bridge.exe` |
+            | Windows (installer) | `venoapp-bridge-setup.exe` |
+            | Windows (portable, no install) | `venoapp-bridge-portable.exe` |
             | Linux PC / Raspberry Pi | `venoapp-bridge.AppImage` |
 
-            **Windows:** Run the installer (.exe). If SmartScreen warns you, click "More info" → "Run anyway".
+            **Windows installer:** Run setup.exe, click "More info" → "Run anyway" if SmartScreen appears.
+            **Windows portable:** Just double-click — no installation needed. Use this if the installer doesn't work.
             **Linux / Raspberry Pi:** Download the AppImage, make it executable (`chmod +x`), then run it.
 
-            After installing, open VenoApp Bridge once to enter your restaurant code and printer IP. It will run silently in the background from then on.
+            After first launch, enter your restaurant code and printer IP. The app runs silently in the background from then on.
           files: |
-            venoapp-bridge.exe
+            venoapp-bridge-setup.exe
+            venoapp-bridge-portable.exe
             venoapp-bridge.AppImage
           draft: false
           prerelease: false

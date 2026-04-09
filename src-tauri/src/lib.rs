@@ -277,6 +277,13 @@ pub fn run() {
             info!("[Main] VenoApp Bridge started");
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Hide to tray instead of quitting
+                window.hide().ok();
+                api.prevent_close();
+            }
+        })
         .invoke_handler(tauri::generate_handler![get_config, save_config, get_status, test_print, resolve_bridge_code, get_connected_devices, get_logo_url])
         .run(tauri::generate_context!())
         .expect("Error running Tauri application");
@@ -288,6 +295,9 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit_item = MenuItemBuilder::with_id("quit", "Quit VenoApp Bridge").build(app)?;
     let menu = MenuBuilder::new(app).items(&[&show_item, &quit_item]).build()?;
     TrayIconBuilder::new()
+        .icon(app.default_window_icon().cloned().unwrap_or_else(|| {
+            tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png")).expect("tray icon")
+        }))
         .menu(&menu)
         .tooltip("VenoApp Bridge — running")
         .on_menu_event(|app, event| match event.id.as_ref() {

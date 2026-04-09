@@ -103,19 +103,24 @@ jobs:
         run: |
           find src-tauri/target/release/bundle/nsis -name "*.exe" \
             -exec cp {} venoapp-bridge-setup.exe \; 2>/dev/null || true
-          cp src-tauri/target/release/venoapp-bridge.exe venoapp-bridge-portable.exe 2>/dev/null || true
+          # Find the release binary (name varies by productName)
+          find src-tauri/target/release -maxdepth 1 -name "*.exe" ! -name "*setup*" ! -name "*install*" \
+            -exec cp {} venoapp-bridge-portable.exe \; 2>/dev/null || true
+          ls -la venoapp-bridge-setup.exe venoapp-bridge-portable.exe || true
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
           path: venoapp-bridge-setup.exe
+          if-no-files-found: warn
 
       - name: Upload portable exe
         uses: actions/upload-artifact@v4
         with:
           name: windows-portable
           path: venoapp-bridge-portable.exe
+          if-no-files-found: warn
 
   # ─── Create GitHub Release ────────────────────────────────────────────────
   release:

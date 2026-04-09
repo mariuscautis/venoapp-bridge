@@ -131,6 +131,7 @@ async function resolveBridgeCode(code) {
 }
 
 // ── Connected peers ────────────────────────────────────────────────────────────
+let _logoUrl = '';
 const peers = new Map();
 let peerCounter = 1;
 
@@ -348,7 +349,7 @@ async function main() {
   const logoUrlRef = { value: '' };
   const ip = getLocalIp();
 
-  fetchLogoUrl().then(url => { if (url) logoUrlRef.value = url; });
+  fetchLogoUrl().then(url => { if (url) { logoUrlRef.value = url; _logoUrl = url; } });
 
   const handler = makeHandler(tokenRef, logoUrlRef);
   const hasCert = ensureCert(ip);
@@ -395,7 +396,26 @@ async function main() {
 }
 
 // Export for Electron — called by bridge-electron/main.js
-module.exports = { start: main, getConfig: cfg };
+async function saveAndConnect(bridgeCode, printerIp) {
+  try {
+    const row = await resolveBridgeCode(bridgeCode);
+    saveConfig({ ..._cfg, bridge_code: bridgeCode, restaurant_id: row.id, restaurant_name: row.name, printer_ip: printerIp || '', setup_complete: true });
+    await pushToSupabase();
+    return { ok: true, restaurant_name: row.name };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+module.exports = {
+  start:         main,
+  getConfig:     cfg,
+  getLocalIp,
+  getToken:      () => _cfg.ws_auth_token || '',
+  getPeerCount:  () => peers.size,
+  getLogoUrl:    () => _logoUrl,
+  saveAndConnect,
+};
 
 // Run directly when invoked as a standalone script
 if (require.main === module) {

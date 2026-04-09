@@ -26,6 +26,8 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "ui.html",
       "server.js",
       "icon.png",
       "node_modules/**"

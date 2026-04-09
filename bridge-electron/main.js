@@ -1,139 +1,107 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs   = require('fs');
 
 // ── Single instance lock ───────────────────────────────────────────────────────
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-  process.exit(0);
-}
+if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 // ── State ──────────────────────────────────────────────────────────────────────
-let win   = null;
-let tray  = null;
+let win      = null;
+let tray     = null;
 let quitting = false;
 
-// ── Start the Bridge server ────────────────────────────────────────────────────
+// ── Load Bridge server module ──────────────────────────────────────────────────
 const bridge = require('./server.js');
-
-function showPortInUseError() {
-  const { dialog } = require('electron');
-  dialog.showErrorBox(
-    'VenoApp Bridge — Port In Use',
-    'Port 3355 is already in use by another process.\n\nPlease close any previous version of VenoApp Bridge running in the taskbar or Task Manager, then relaunch.'
-  );
-  app.quit();
-}
 
 // ── Create window ──────────────────────────────────────────────────────────────
 function createWindow() {
   win = new BrowserWindow({
     width:  480,
-    height: 680,
-    minWidth:  400,
-    minHeight: 500,
+    height: 700,
+    minWidth:  420,
+    minHeight: 560,
     resizable: true,
     title: 'VenoApp Bridge',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
     backgroundColor: '#0f1117',
   });
 
-  // Remove default menu bar
   win.setMenuBarVisibility(false);
-
-  win.webContents.on('did-fail-load', (_e, code, desc) => {
-    // Server not ready yet — retry after a short delay
-    if (code === -102 || code === -6 || desc === 'ERR_CONNECTION_REFUSED') {
-      setTimeout(() => { if (win) win.loadURL('http://localhost:3355'); }, 1000);
-    }
-  });
+  win.loadFile(path.join(__dirname, 'ui.html'));
 
   win.webContents.once('did-finish-load', () => {
-    // Show window once page has actually loaded
     win.show();
     win.focus();
   });
 
-  // Hide to tray on close instead of quitting
   win.on('close', (e) => {
-    if (!quitting) {
-      e.preventDefault();
-      win.hide();
-    }
+    if (!quitting) { e.preventDefault(); win.hide(); }
   });
 }
 
 // ── System tray ────────────────────────────────────────────────────────────────
 function createTray() {
-  const iconPath = path.join(__dirname, '..', 'src-tauri', 'icons', '32x32.png');
-  const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'icon.png')));
-
-  const menu = Menu.buildFromTemplate([
-    {
-      label: 'Show VenoApp Bridge',
-      click: () => { win.show(); win.focus(); },
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => { quitting = true; app.quit(); },
-    },
-  ]);
-
   tray.setToolTip('VenoApp Bridge — running');
-  tray.setContextMenu(menu);
-
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show VenoApp Bridge', click: () => { win.show(); win.focus(); } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+  ]));
   tray.on('double-click', () => { win.show(); win.focus(); });
 }
 
-// ── Second instance → show existing window ────────────────────────────────────
-app.on('second-instance', () => {
-  if (win) { win.show(); win.focus(); }
-});
+// ── IPC handlers (renderer ↔ main) ────────────────────────────────────────────
+function setupIpc() {
+  ipcMain.handle('get-status', () => {
+    const cfg = bridge.getConfig();
+    return {
+      setup_complete:    !!cfg.setup_complete,
+      restaurant_name:   cfg.restaurant_name || '',
+      bridge_code:       cfg.bridge_code || '',
+      printer_ip:        cfg.printer_ip || '',
+      hub_ip:            bridge.getLocalIp(),
+      ws_token:          bridge.getToken() ? bridge.getToken().slice(0, 8) + '...' : '',
+      connected_devices: bridge.getPeerCount(),
+      logo_url:          bridge.getLogoUrl(),
+    };
+  });
+
+  ipcMain.handle('save-config', async (_e, data) => {
+    return bridge.saveAndConnect(data.bridge_code, data.printer_ip);
+  });
+}
 
 // ── App ready ──────────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  // Auto-start on Windows login
   app.setLoginItemSettings({ openAtLogin: true });
+  setupIpc();
 
-  // Create window and tray first so they exist during server start
-  createWindow();
-  createTray();
-
-  // Start the server
   try {
     await bridge.start();
   } catch (e) {
-    if (e.code === 'EADDRINUSE') { showPortInUseError(); return; }
-    const { dialog } = require('electron');
-    dialog.showErrorBox('VenoApp Bridge — Startup Error', e.message);
+    if (e.code === 'EADDRINUSE') {
+      dialog.showErrorBox('Port In Use', 'Port 3355 is already in use.\n\nClose any previous VenoApp Bridge instance and try again.');
+    } else {
+      dialog.showErrorBox('Startup Error', e.message);
+    }
     app.quit();
     return;
   }
 
-  // Small delay to ensure server is fully ready, then load UI
-  setTimeout(() => {
-    if (win) win.loadURL('http://localhost:3355');
-  }, 500);
+  createWindow();
+  createTray();
 });
 
-// Don't quit when all windows are closed — stay in tray
-app.on('window-all-closed', (e) => {
-  if (process.platform !== 'darwin') {
-    // do nothing — keep running in tray
-  }
-});
-
+app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
+app.on('window-all-closed', () => { /* stay in tray */ });
 app.on('before-quit', () => { quitting = true; });
-
-app.on('activate', () => {
-  // macOS dock click
-  if (win) { win.show(); win.focus(); }
-});
+app.on('activate', () => { if (win) { win.show(); win.focus(); } });

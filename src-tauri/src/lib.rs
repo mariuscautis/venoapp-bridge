@@ -294,10 +294,11 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItemBuilder::with_id("show", "Show").build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", "Quit VenoApp Bridge").build(app)?;
     let menu = MenuBuilder::new(app).items(&[&show_item, &quit_item]).build()?;
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+        .or_else(|_| tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png")))
+        .unwrap_or_else(|_| app.default_window_icon().cloned().expect("no app icon"));
     TrayIconBuilder::new()
-        .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))
-            .unwrap_or_else(|_| app.default_window_icon().cloned().unwrap()))
-        .icon_as_template(false)
+        .icon(icon)
         .menu(&menu)
         .tooltip("VenoApp Bridge — running")
         .on_menu_event(|app, event| match event.id.as_ref() {

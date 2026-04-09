@@ -39,7 +39,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "postinstallAction": "run"
+        "postinstallAction": "launch"
       }
     },
     "android": {

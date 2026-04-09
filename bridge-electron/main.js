@@ -17,6 +17,15 @@ let quitting = false;
 // ── Start the Bridge server ────────────────────────────────────────────────────
 const bridge = require('./server.js');
 
+function showPortInUseError() {
+  const { dialog } = require('electron');
+  dialog.showErrorBox(
+    'VenoApp Bridge — Port In Use',
+    'Port 3355 is already in use by another process.\n\nPlease close any previous version of VenoApp Bridge running in the taskbar or Task Manager, then relaunch.'
+  );
+  app.quit();
+}
+
 // ── Create window ──────────────────────────────────────────────────────────────
 function createWindow() {
   win = new BrowserWindow({
@@ -96,7 +105,12 @@ app.whenReady().then(async () => {
   app.setLoginItemSettings({ openAtLogin: true });
 
   // Start the server, then load UI
-  await bridge.start();
+  try {
+    await bridge.start();
+  } catch (e) {
+    if (e.code === 'EADDRINUSE') { showPortInUseError(); return; }
+    throw e;
+  }
 
   createWindow();
   createTray();

@@ -365,25 +365,29 @@ async function main() {
 
   setupWs(server, tokenRef);
 
-  server.listen(3355, '0.0.0.0', async () => {
-    const proto = hasCert ? 'https' : 'http';
-    const wsProto = hasCert ? 'wss' : 'ws';
-    console.log('');
-    console.log('  VenoApp Bridge running');
-    console.log(`  Config UI : ${proto}://localhost:3355`);
-    console.log(`  WebSocket : ${wsProto}://${ip}:3355`);
-    console.log(`  Token     : ${tokenRef.value.slice(0,8)}...`);
-    console.log('');
-
-    if (cfg().setup_complete) {
-      console.log(`[Bridge] Restaurant: ${cfg().restaurant_name}`);
-      await pushToSupabase();
-    } else if (require.main === module) {
-      // Only auto-open browser when run directly (not from Electron)
-      const url = `${proto}://localhost:3355`;
-      exec(process.platform === 'win32' ? `start "" "${url}"` : `open "${url}"`);
-    }
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(3355, '0.0.0.0', resolve);
   });
+
+  // Listen is now up — run startup logic
+  const proto   = hasCert ? 'https' : 'http';
+  const wsProto = hasCert ? 'wss'   : 'ws';
+  console.log('');
+  console.log('  VenoApp Bridge running');
+  console.log(`  Config UI : ${proto}://localhost:3355`);
+  console.log(`  WebSocket : ${wsProto}://${ip}:3355`);
+  console.log(`  Token     : ${tokenRef.value.slice(0,8)}...`);
+  console.log('');
+
+  if (cfg().setup_complete) {
+    console.log(`[Bridge] Restaurant: ${cfg().restaurant_name}`);
+    await pushToSupabase();
+  } else if (require.main === module) {
+    // Only auto-open browser when run directly (not from Electron)
+    const url = `${proto}://localhost:3355`;
+    exec(process.platform === 'win32' ? `start "" "${url}"` : `open "${url}"`);
+  }
 
   setInterval(pushToSupabase, 30_000);
   process.on('SIGINT',  () => { console.log('\n[Bridge] Stopped.'); process.exit(0); });

@@ -79,7 +79,7 @@ jobs:
         run: |
           cd bridge-node
           npm install
-          npx pkg server.js --targets node18-win-x64 --output ../venoapp-bridge-windows.exe --compress GZip
+          npx pkg server.js --targets node18-win-x64 --output ../venoapp-bridge-windows.exe --compress GZip --public-packages "*"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

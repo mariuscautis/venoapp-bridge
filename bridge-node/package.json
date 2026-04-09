@@ -9,7 +9,8 @@
     "build:linux": "pkg server.js --targets node18-linux-x64 --output ../venoapp-bridge-linux --compress GZip"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "selfsigned": "^2.4.1"
   },
   "devDependencies": {
     "pkg": "^5.8.1"

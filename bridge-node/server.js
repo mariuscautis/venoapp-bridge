@@ -53,78 +53,38 @@ function getLocalIp() {
   return '127.0.0.1';
 }
 
-// ── Self-signed TLS cert (generated once, stored on disk) ─────────────────────
-// We use Node's built-in crypto to generate a self-signed cert so there's
-// no dependency on openssl being installed.
-function generateSelfSignedCert(ip) {
-  // Use forge-like approach via built-in crypto — generate key pair then
-  // create a minimal self-signed cert using raw ASN.1.
-  // Easier: just use the selfsigned npm package which is already bundled.
-  // Since we can't add deps easily with pkg, generate via openssl if available,
-  // otherwise fall back to a pre-baked static cert (only used for TLS handshake,
-  // not for identity verification — users will see "not secure" warning once).
-
-  // Try openssl
-  try {
-    const { execSync } = require('child_process');
-    execSync(
-      `openssl req -x509 -newkey rsa:2048 -keyout "${KEY_PATH}" -out "${CERT_PATH}" ` +
-      `-days 3650 -nodes -subj "/CN=venoapp-bridge" ` +
-      `-addext "subjectAltName=IP:${ip},IP:127.0.0.1"`,
-      { stdio: 'pipe' }
-    );
-    console.log('[TLS] Generated self-signed certificate via openssl');
-    return true;
-  } catch {}
-
-  // Fallback: use a hardcoded self-signed cert (2048-bit RSA, valid 10 years)
-  // This is a generic cert — all Bridge instances will use the same one.
-  // It's fine: we only need TLS for the mixed-content bypass, not for identity.
-  const FALLBACK_CERT = `-----BEGIN CERTIFICATE-----
-MIICpDCCAYwCCQDU9pQ4pHdTvDANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAl2
-ZW5vYXBwLWIwHhcNMjUwMTAxMDAwMDAwWhcNMzUwMTAxMDAwMDAwWjAUMRIwEAYD
-VQQDDAl2ZW5vYXBwLWIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC7
-o4qne60TB3wolFbLbFyFkPmIoKcqpMEHLOSWy0sEWVs/35CAvGsAEMH53WDWQK/k
-ov7V0zeY0DlKBTExCFzXJHnR56UQNGMSrN9JmGNDqPDz4ICLqFlylyFGKnfuDmqM
-wAHHBaaGaRbAZ/Y8R5DLqt0C7TlBh1BOrZP3FIVgN8r6e0DPanYaR3UYq5FXSMFM
-pOKMp8a3OHoXvnBkHnOaO4C7e2bwE2sW5fCjZFjGpLyUwLnlaqpEPNhWcBp1TF3D
-VV73mD8lxJHHXqp5HhJbGSZCvN0XHCAJ30f62G3fGnkiuFaZe3V1n3CQMJ5UGjXG
-/2Pz7H3FqHAWBCLxAgMBAAEwDQYJKoZIhvcNAQELBQADggEBABfuRBKpjggJoZc4
-OFH4PZxGSfkCNgEzW/7LcP8QZQ5bM4QrV2S8Fk+mnFmB0vJ5r/JH6j3P2E8tKC9
-iM5nJ2WN8BKGK1cGxpZ7TmLbR6z4dj4IFR9P4cM0V2k3RpL7KjVqJKi3nfx9XeY
-ClnJ4bS8P8sK2O1z7R0X3EpR5dGC4mC9L5p8k3lH2hKT4G0vE9sJJB/hJn7TlA9
-lBqW1Y0K2J4C9kE1Ql8HoiVWQNJk3A5ZGm5eEPFTjOIVRi5n6BaPdnMrT5g7Lh3
-kOJj7JuVFRvjWLxHB/RcgQ9qhCj0i0Bs0k0cK4L+yJHIvS9rKQ/GV3mxNhFzEBN
-w4o=
------END CERTIFICATE-----`;
-
-  const FALLBACK_KEY = `-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7o4qne60TB3wo
-lFbLbFyFkPmIoKcqpMEHLOSWy0sEWVs/35CAvGsAEMH53WDWQk/kov7V0zeY0Dlk
-BTExCFzXJHnR56UQNGMSrN9JmGNDqPDz4ICLqFlylyFGKnfuDmqMwAHHBaaGaRbA
-Z/Y8R5DLqt0C7TlBh1BOrZP3FIVgN8r6e0DPanYaR3UYq5FXSMFMpOKMp8a3OHoX
-vnBkHnOaO4C7e2bwE2sW5fCjZFjGpLyUwLnlaqpEPNhWcBp1TF3DVV73mD8lxJHH
-XqP5HhJbGSZCvN0XHCAJ30f62G3fGnkiuFaZe3V1n3CQMJ5UGjXG/2Pz7H3FqHAW
-BCLxAgMBAAECggEADummyKeyForFallbackOnlyNotRealPrivateKey123456789abcde
-fghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=======
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAECgYEA7dummy1111111111111111
-11111111111111111111111111111111111111111111111111111111111111111111111
-AQKBgQDdummy2222222222222222222222222222222222222222222222222222222222
------END PRIVATE KEY-----`;
-
-  // The fallback won't actually work for TLS (fake key), so just warn and use HTTP
-  console.warn('[TLS] openssl not found — falling back to plain HTTP (ws://)');
-  console.warn('[TLS] Staff devices must access VenoApp from http:// not https:// for Bridge to connect.');
-  return false;
-}
-
+// ── Self-signed TLS cert (generated once via selfsigned package) ───────────────
 function ensureCert(ip) {
-  if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) return true;
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  return generateSelfSignedCert(ip);
+  if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) {
+    console.log('[TLS] Using existing certificate');
+    return true;
+  }
+  try {
+    const selfsigned = require('selfsigned');
+    const attrs = [{ name: 'commonName', value: 'venoapp-bridge' }];
+    const opts  = {
+      keySize: 2048,
+      days: 3650,
+      algorithm: 'sha256',
+      extensions: [{
+        name: 'subjectAltName',
+        altNames: [
+          { type: 7, ip: ip },
+          { type: 7, ip: '127.0.0.1' },
+        ],
+      }],
+    };
+    const pems = selfsigned.generate(attrs, opts);
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(CERT_PATH, pems.cert);
+    fs.writeFileSync(KEY_PATH,  pems.private);
+    console.log('[TLS] Generated self-signed certificate');
+    return true;
+  } catch (e) {
+    console.warn('[TLS] Could not generate cert:', e.message);
+    console.warn('[TLS] Running on plain HTTP — staff devices may not connect from the VenoApp PWA.');
+    return false;
+  }
 }
 
 // ── Supabase ───────────────────────────────────────────────────────────────────

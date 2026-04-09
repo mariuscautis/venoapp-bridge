@@ -297,9 +297,10 @@ input:focus{border-color:#6262bd}
       <div class="row"><span class="lbl"><span class="dot" style="background:#22c55e"></span>Status</span><span class="val" style="color:#22c55e">Bridge Active</span></div>
     </div>
     <div class="notice">
-      <strong style="color:#e2e8f0">Staff devices not connecting?</strong><br>
-      Staff browsers block plain WebSocket (ws://) connections from the VenoApp app (which is served over https://).<br><br>
-      To fix: on each staff device, open <a href="https://${getLocalIp()}:3355" target="_blank">https://${getLocalIp()}:3355</a> in a browser tab, click <strong>Advanced → Proceed</strong> to trust the certificate, then reload VenoApp. This only needs to be done once per device.
+      <strong style="color:#e2e8f0">First-time setup for each staff device</strong><br>
+      Each device needs to trust the Bridge certificate once before it can connect.<br><br>
+      On each staff device, tap the button below, click <strong>Advanced → Proceed</strong> when the browser warns you, then come back to VenoApp. Only needed once per device.
+      <a href="https://${getLocalIp()}:3355" target="_blank" style="display:block;margin-top:12px;padding:10px 0;background:#6262bd;color:#fff;text-align:center;border-radius:7px;font-weight:600;font-size:13px;text-decoration:none">Trust Certificate on This Device</a>
     </div>
     <button class="btn btn-sec" style="margin-top:16px" onclick="document.getElementById('form').style.display='';document.getElementById('saveBtn').textContent='Update &amp; Restart'">Edit Settings</button>
   </div>

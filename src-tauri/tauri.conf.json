@@ -38,8 +38,7 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser",
-        "postinstallAction": "launch"
+        "installMode": "currentUser"
       }
     },
     "android": {

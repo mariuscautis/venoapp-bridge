@@ -26,7 +26,7 @@ function createWindow() {
     minHeight: 500,
     resizable: true,
     title: 'VenoApp Bridge',
-    icon: path.join(__dirname, '..', 'src-tauri', 'icons', 'icon.ico'),
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -65,7 +65,7 @@ function createWindow() {
 function createTray() {
   const iconPath = path.join(__dirname, '..', 'src-tauri', 'icons', '32x32.png');
   const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon);
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'icon.png')));
 
   const menu = Menu.buildFromTemplate([
     {

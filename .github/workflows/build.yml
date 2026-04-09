@@ -86,9 +86,11 @@ jobs:
             fs.writeFileSync('bridge-electron/package.json', JSON.stringify(p, null, 2));
           "
 
-      - name: Copy server.js into bridge-electron
+      - name: Copy server.js and icon into bridge-electron
         shell: bash
-        run: cp bridge-node/server.js bridge-electron/server.js
+        run: |
+          cp bridge-node/server.js bridge-electron/server.js
+          cp src-tauri/icons/128x128@2x.png bridge-electron/icon.png
 
       - name: Install dependencies
         working-directory: bridge-electron

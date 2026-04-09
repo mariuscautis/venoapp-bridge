@@ -2,6 +2,8 @@
   "name": "venoapp-bridge",
   "version": "1.0.0",
   "description": "VenoApp Bridge — local hub for receipt printing and offline order sync",
+  "author": "VenoApp",
+  "repository": "https://github.com/mariuscautis/venoapp-bridge",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -25,11 +27,12 @@
     "files": [
       "main.js",
       "server.js",
+      "icon.png",
       "node_modules/**"
     ],
     "win": {
       "target": ["nsis"],
-      "icon": "../src-tauri/icons/icon.ico",
+      "icon": "icon.png",
       "artifactName": "venoapp-bridge-windows-setup.exe"
     },
     "nsis": {

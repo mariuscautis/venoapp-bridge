@@ -378,7 +378,8 @@ async function main() {
     if (cfg().setup_complete) {
       console.log(`[Bridge] Restaurant: ${cfg().restaurant_name}`);
       await pushToSupabase();
-    } else {
+    } else if (require.main === module) {
+      // Only auto-open browser when run directly (not from Electron)
       const url = `${proto}://localhost:3355`;
       exec(process.platform === 'win32' ? `start "" "${url}"` : `open "${url}"`);
     }
@@ -389,4 +390,10 @@ async function main() {
   process.on('SIGTERM', () => process.exit(0));
 }
 
-main().catch(e => { console.error('[Bridge] Fatal:', e); process.exit(1); });
+// Export for Electron — called by bridge-electron/main.js
+module.exports = { start: main, getConfig: cfg };
+
+// Run directly when invoked as a standalone script
+if (require.main === module) {
+  main().catch(e => { console.error('[Bridge] Fatal:', e); process.exit(1); });
+}

@@ -7,7 +7,7 @@ on:
 
 jobs:
 
-  # ─── Linux AppImage ────────────────────────────────────────────────────────
+  # ─── Linux AppImage (Tauri) ────────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-22.04
     steps:
@@ -64,28 +64,47 @@ jobs:
           name: linux-appimage
           path: venoapp-bridge.AppImage
 
-  # ─── Windows exe (Node.js, no WebView2 required) ─────────────────────────
+  # ─── Windows installer (Electron) ─────────────────────────────────────────
   build-windows:
-    runs-on: ubuntu-22.04
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Install dependencies and build Windows exe
+      - name: Set version from tag
+        shell: bash
         run: |
-          cd bridge-node
-          npm install
-          npx pkg server.js --targets node18-win-x64 --output ../venoapp-bridge-windows.exe --compress GZip --public-packages "*"
+          VERSION=${GITHUB_REF_NAME#v}
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('bridge-electron/package.json','utf8'));
+            p.version = '$VERSION';
+            fs.writeFileSync('bridge-electron/package.json', JSON.stringify(p, null, 2));
+          "
+
+      - name: Copy server.js into bridge-electron
+        shell: bash
+        run: cp bridge-node/server.js bridge-electron/server.js
+
+      - name: Install dependencies
+        working-directory: bridge-electron
+        run: npm install
+
+      - name: Build Windows installer
+        working-directory: bridge-electron
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exe
-          path: venoapp-bridge-windows.exe
+          name: windows-installer
+          path: dist-electron/venoapp-bridge-windows-setup.exe
           if-no-files-found: error
 
   # ─── Create GitHub Release ────────────────────────────────────────────────
@@ -103,7 +122,7 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-exe
+          name: windows-installer
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -116,16 +135,15 @@ jobs:
 
             | Platform | Download |
             |----------|----------|
-            | Windows PC | `venoapp-bridge-windows.exe` |
+            | Windows PC | `venoapp-bridge-windows-setup.exe` |
             | Linux PC / Raspberry Pi | `venoapp-bridge.AppImage` |
 
-            **Windows:** Download and double-click `venoapp-bridge-windows.exe`. No installation required — no WebView2 needed.
-            Your browser will open automatically at `http://localhost:3355` for setup.
-            Keep the terminal window open (or add it to Windows startup via Task Scheduler).
+            **Windows:** Run the installer. If SmartScreen appears, click "More info" → "Run anyway".
+            VenoApp Bridge opens automatically and sits in the system tray.
 
             **Linux / Raspberry Pi:** Download the AppImage, make it executable (`chmod +x`), then run it.
           files: |
-            venoapp-bridge-windows.exe
+            venoapp-bridge-windows-setup.exe
             venoapp-bridge.AppImage
           draft: false
           prerelease: false

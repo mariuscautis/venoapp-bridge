@@ -1,0 +1,44 @@
+{
+  "name": "venoapp-bridge",
+  "version": "1.0.0",
+  "description": "VenoApp Bridge — local hub for receipt printing and offline order sync",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "selfsigned": "^2.4.1"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.venoapp.bridge",
+    "productName": "VenoApp Bridge",
+    "copyright": "VenoApp",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "node_modules/**"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "../src-tauri/icons/icon.ico",
+      "artifactName": "venoapp-bridge-windows-setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "VenoApp Bridge"
+    },
+    "asar": true
+  }
+}

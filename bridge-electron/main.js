@@ -47,18 +47,17 @@ function createWindow() {
   // Remove default menu bar
   win.setMenuBarVisibility(false);
 
-  // Load the Bridge UI served by the local server
-  // Use http:// so Electron doesn't reject the self-signed cert
-  win.loadURL('http://localhost:3355');
-
-  win.once('ready-to-show', () => {
-    const cfg = bridge.getConfig();
-    if (!cfg.setup_complete) {
-      // First run — show window for setup
-      win.show();
-      win.focus();
+  win.webContents.on('did-fail-load', (_e, code, desc) => {
+    // Server not ready yet — retry after a short delay
+    if (code === -102 || code === -6 || desc === 'ERR_CONNECTION_REFUSED') {
+      setTimeout(() => { if (win) win.loadURL('http://localhost:3355'); }, 1000);
     }
-    // If already configured, stay hidden in tray
+  });
+
+  win.webContents.once('did-finish-load', () => {
+    // Show window once page has actually loaded
+    win.show();
+    win.focus();
   });
 
   // Hide to tray on close instead of quitting
@@ -104,16 +103,25 @@ app.whenReady().then(async () => {
   // Auto-start on Windows login
   app.setLoginItemSettings({ openAtLogin: true });
 
-  // Start the server, then load UI
+  // Create window and tray first so they exist during server start
+  createWindow();
+  createTray();
+
+  // Start the server
   try {
     await bridge.start();
   } catch (e) {
     if (e.code === 'EADDRINUSE') { showPortInUseError(); return; }
-    throw e;
+    const { dialog } = require('electron');
+    dialog.showErrorBox('VenoApp Bridge — Startup Error', e.message);
+    app.quit();
+    return;
   }
 
-  createWindow();
-  createTray();
+  // Small delay to ensure server is fully ready, then load UI
+  setTimeout(() => {
+    if (win) win.loadURL('http://localhost:3355');
+  }, 500);
 });
 
 // Don't quit when all windows are closed — stay in tray

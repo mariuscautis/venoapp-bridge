@@ -22,13 +22,6 @@
         "visible": true
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false,
-      "menuOnLeftClick": false,
-      "title": "VenoApp Bridge",
-      "tooltip": "VenoApp Bridge"
-    },
     "security": {
       "csp": null
     }
@@ -43,6 +36,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "postinstallAction": "run"
+      }
+    },
     "android": {
       "minSdkVersion": 24
     },

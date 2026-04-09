@@ -38,10 +38,7 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser",
-        "webviewInstallMode": {
-          "type": "downloadBootstrapper"
-        }
+        "installMode": "perMachine"
       }
     },
     "android": {
